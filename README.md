@@ -21,7 +21,6 @@ make
 ```
 
 ## Implementations
-
 - **Stop-and-Wait:** Sends a packet and waits for its acknowledgement before continuing.
 - **Go-Back-N:** Uses a sliding window and cumulative acknowledgements; retransmits outstanding packets when necessary.
 - **Selective Repeat:** Tracks acknowledgements per packet and retransmits unacknowledged packets.
@@ -66,13 +65,11 @@ Run each program in a separate terminal from the project root.
 The general sender connects directly to the receiver on port 9000. When using the channel emulator, the sender must instead target port 7000.
 
 ## Adaptive Retransmission Timeout
-
 The general file sender estimates the round-trip time (RTT) and updates its retransmission timeout (RTO). It uses smoothed RTT and RTT variation, applies timeout backoff, and avoids RTT samples from retransmitted packets in accordance with Karn's algorithm.
 
 ## Testing
 
 Basic tests have verified successful Stop-and-Wait, Go-Back-N, and Selective Repeat transfers. A Go-Back-N packet-loss recovery test and a reordering-enabled transfer have also produced the expected output.
-
 ## Limitations and Future Work
 
 - Extend adaptive RTO and Karn's algorithm to Go-Back-N and Selective Repeat.
@@ -81,28 +78,27 @@ Basic tests have verified successful Stop-and-Wait, Go-Back-N, and Selective Rep
 - Add cryptographic file-integrity verification if required; the current FNV-1a checksum is not cryptographic.
 
 ## Experiment Results and Graphs
-
 The project includes automated experiments evaluating the reliability and performance of Stop-and-Wait, Go-Back-N, and Selective Repeat over UDP.
 
 ### Performance Graphs
 
 #### 1. Goodput vs Packet Loss
-![Goodput vs Packet Loss](results/plots/goodput_vs_packet_loss.png)
+[Goodput vs Packet Loss](results/plots/goodput_vs_packet_loss.png)
 
 #### 2. Retransmissions vs Packet Loss
-![Retransmissions vs Packet Loss](results/plots/retransmissions_vs_packet_loss.png)
+[Retransmissions vs Packet Loss](results/plots/retransmissions_vs_packet_loss.png)
 
 #### 3. Transfer Time vs Packet Loss
-![Transfer Time vs Packet Loss](results/plots/transfer_time_vs_packet_loss.png)
+[Transfer Time vs Packet Loss](results/plots/transfer_time_vs_packet_loss.png)
 
 #### 4. Goodput vs Network Delay
-![Goodput vs Network Delay](results/plots/goodput_vs_delay.png)
+[Goodput vs Network Delay](results/plots/goodput_vs_delay.png)
 
 #### 5. Window Size vs Goodput
-![Window Size vs Goodput](results/plots/window_size_vs_goodput.png)
+[Window Size vs Goodput](results/plots/window_size_vs_goodput.png)
 
 #### 6. Protocol Comparison
-![Protocol Comparison](results/plots/protocol_comparison.png)
+[Protocol Comparison](results/plots/protocol_comparison.png)
 
 ### Running the Experiments
 
@@ -116,13 +112,11 @@ The scripts save raw experiment data to results/raw/, aggregated statistics to r
 
 
 ## 📊 Experiment Results and Performance Analysis
-
 The project evaluates the performance and reliability of three ARQ protocols over UDP:
 
 * **Stop-and-Wait**
 * **Go-Back-N (GBN)**
 * **Selective Repeat (SR)**
-
 A configurable channel emulator introduces network impairments such as packet loss, delay, duplication, reordering, and corruption. Automated experiments measure protocol performance under different network conditions.
 
 ### 📈 Performance Graphs
@@ -131,37 +125,36 @@ A configurable channel emulator introduces network impairments such as packet lo
 
 Shows how effective data-transfer throughput changes as packet loss increases.
 
-![Goodput vs Packet Loss](results/plots/goodput_vs_packet_loss.png)
+[Goodput vs Packet Loss](results/plots/goodput_vs_packet_loss.png)
 
 #### 2. Retransmissions vs Packet Loss
 
 Illustrates how packet loss affects the number of retransmissions.
 
-![Retransmissions vs Packet Loss](results/plots/retransmissions_vs_packet_loss.png)
+[Retransmissions vs Packet Loss](results/plots/retransmissions_vs_packet_loss.png)
 
 #### 3. Transfer Time vs Packet Loss
 
 Compares file-transfer duration under different packet-loss conditions.
 
-![Transfer Time vs Packet Loss](results/plots/transfer_time_vs_packet_loss.png)
+[Transfer Time vs Packet Loss](results/plots/transfer_time_vs_packet_loss.png)
 
 #### 4. Goodput vs Network Delay
 
 Examines the relationship between network delay and effective data-transfer throughput.
-
-![Goodput vs Network Delay](results/plots/goodput_vs_delay.png)
+[Goodput vs Network Delay](results/plots/goodput_vs_delay.png)
 
 #### 5. Window Size vs Goodput
 
 Evaluates the relationship between sender window size and data-transfer performance.
 
-![Window Size vs Goodput](results/plots/window_size_vs_goodput.png)
+[Window Size vs Goodput](results/plots/window_size_vs_goodput.png)
 
 #### 6. Protocol Comparison
 
 Provides a visual comparison of the tested ARQ protocols.
 
-![Protocol Comparison](results/plots/protocol_comparison.png)
+[Protocol Comparison](results/plots/protocol_comparison.png)
 
 ### 🧪 Running the Experiments
 
