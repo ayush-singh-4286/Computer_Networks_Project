@@ -1,32 +1,41 @@
+CC ?= gcc
+CFLAGS = -Wall -Wextra -std=c11 -Iinclude -Iemulator
 
-CC = gcc
-CFLAGS = -Wall -Wextra -Wpedantic -std=c11 -Iinclude
+ifeq ($(OS),Windows_NT)
+    LDLIBS = -lws2_32
+    RM_CMD = cmd /c "del /f /q sender receiver receiver_sr stop_wait go_back_n selective_repeat channel_emulator *.exe *.o src\*.o emulator\*.o 2>nul || exit 0"
+else
+    LDLIBS =
+    RM_CMD = rm -f $(TARGETS) *.exe *.o src/*.o emulator/*.o
+endif
 
 COMMON = src/packet.c src/checksum.c
+TARGETS = sender receiver receiver_sr stop_wait go_back_n selective_repeat channel_emulator
 
-all: sender receiver receiver_sr stop_wait go_back_n selective_repeat channel_emulator
-sender: src/sender.c $(COMMON) include/packet.h
-	$(CC) $(CFLAGS) src/sender.c $(COMMON) -o sender
+all: $(TARGETS)
 
-receiver: src/receiver.c $(COMMON) include/packet.h
-	$(CC) $(CFLAGS) src/receiver.c $(COMMON) -o receiver
+sender: src/sender.c $(COMMON) include/packet.h include/net_compat.h
+	$(CC) $(CFLAGS) src/sender.c $(COMMON) $(LDLIBS) -o $@
 
-receiver_sr: src/receiver_sr.c $(COMMON) include/packet.h
-	$(CC) $(CFLAGS) src/receiver_sr.c $(COMMON) -o receiver_sr
+receiver: src/receiver.c $(COMMON) include/packet.h include/net_compat.h
+	$(CC) $(CFLAGS) src/receiver.c $(COMMON) $(LDLIBS) -o $@
 
-stop_wait: src/stop_wait.c $(COMMON) include/packet.h
-	$(CC) $(CFLAGS) src/stop_wait.c $(COMMON) -o stop_wait
+receiver_sr: src/receiver_sr.c $(COMMON) include/packet.h include/net_compat.h
+	$(CC) $(CFLAGS) src/receiver_sr.c $(COMMON) $(LDLIBS) -o $@
 
-go_back_n: src/go_back_n.c $(COMMON) include/packet.h
-	$(CC) $(CFLAGS) src/go_back_n.c $(COMMON) -o go_back_n
+stop_wait: src/stop_wait.c $(COMMON) include/packet.h include/net_compat.h
+	$(CC) $(CFLAGS) src/stop_wait.c $(COMMON) $(LDLIBS) -o $@
 
-selective_repeat: src/selective_repeat.c $(COMMON) include/packet.h
-	$(CC) $(CFLAGS) src/selective_repeat.c $(COMMON) -o selective_repeat
+go_back_n: src/go_back_n.c $(COMMON) include/packet.h include/net_compat.h
+	$(CC) $(CFLAGS) src/go_back_n.c $(COMMON) $(LDLIBS) -o $@
 
-channel_emulator: emulator/channel_emulator.c emulator/channel_fault.c emulator/channel_emulator.h
-	$(CC) $(CFLAGS) -Iemulator emulator/channel_emulator.c emulator/channel_fault.c -o channel_emulator
+selective_repeat: src/selective_repeat.c $(COMMON) include/packet.h include/net_compat.h
+	$(CC) $(CFLAGS) src/selective_repeat.c $(COMMON) $(LDLIBS) -o $@
+
+channel_emulator: emulator/channel_emulator.c emulator/channel_fault.c emulator/channel_emulator.h include/net_compat.h
+	$(CC) $(CFLAGS) emulator/channel_emulator.c emulator/channel_fault.c $(LDLIBS) -o $@
 
 clean:
-	rm -f sender receiver receiver_sr stop_wait go_back_n selective_repeat channel_emulator sender.exe receiver.exe
+	-$(RM_CMD)
 
 .PHONY: all clean

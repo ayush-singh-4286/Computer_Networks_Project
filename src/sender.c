@@ -1,16 +1,10 @@
-
 #include "packet.h"
 
-#include <arpa/inet.h>
-#include <errno.h>
-#include <inttypes.h>
-#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <unistd.h>
+#include <errno.h>
+#include <inttypes.h>
 #include <math.h>
 
 #define INITIAL_RTO 1.0
@@ -57,14 +51,16 @@ static void update_rto(RttEstimator *est, double sample)
 }
 
 static int send_and_wait_ack(
-    int sockfd,
+    SOCKET sockfd,
     struct sockaddr_in *receiver,
     socklen_t receiver_len,
     uint32_t sequence,
     uint8_t type,
     const uint8_t *payload,
     uint16_t payload_length,
-    RttEstimator *est)
+    RttEstimator *est,
+    uint64_t *retransmissions,
+    uint64_t *timeouts)
 {
     uint8_t packet[MAX_PACKET_SIZE];
     size_t packet_length;
@@ -93,8 +89,14 @@ static int send_and_wait_ack(
             return -1;
         }
 
-        printf("Sending packet: seq=%" PRIu32 ", attempt=%d, RTO=%.3f s\n",
-               sequence, attempt + 1, est->rto);
+        if (attempt > 0) {
+            (*retransmissions)++;
+            printf("Retransmitting packet: seq=%" PRIu32 ", attempt=%d, RTO=%.3f s\n",
+                   sequence, attempt + 1, est->rto);
+        } else {
+            printf("Sending packet: seq=%" PRIu32 ", attempt=1, RTO=%.3f s\n",
+                   sequence, est->rto);
+        }
 
         uint8_t ack_buffer[MAX_PACKET_SIZE];
         struct sockaddr_in from;
@@ -113,8 +115,8 @@ static int send_and_wait_ack(
                 return -1;
             }
 
+            (*timeouts)++;
             printf("ACK timeout.\n");
-            /* Back off timeout after a timeout. */
             est->rto *= 2.0;
             if (est->rto > MAX_RTO)
                 est->rto = MAX_RTO;
@@ -143,10 +145,6 @@ static int send_and_wait_ack(
              (type == TYPE_FIN && ack_type == TYPE_FIN_ACK))) {
             double sample = now_seconds() - sent_at;
 
-            /*
-             * Karn's algorithm: only use RTT samples from packets
-             * acknowledged on their first transmission.
-             */
             if (attempt == 0)
                 update_rto(est, sample);
             else
@@ -157,8 +155,7 @@ static int send_and_wait_ack(
         }
     }
 
-    fprintf(stderr, "Maximum retries exceeded for seq=%" PRIu32 "\n",
-            sequence);
+    fprintf(stderr, "Maximum retries exceeded for seq=%" PRIu32 "\n", sequence);
     return -1;
 }
 
@@ -185,8 +182,8 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) {
+    SOCKET sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd == INVALID_SOCKET) {
         perror("socket");
         fclose(file);
         return EXIT_FAILURE;
@@ -215,14 +212,20 @@ int main(int argc, char *argv[])
     uint8_t payload[MAX_PAYLOAD_SIZE];
     uint32_t sequence = 0;
     int success = 1;
+    uint64_t retransmissions = 0;
+    uint64_t timeouts = 0;
+    uint64_t total_bytes = 0;
+    double start_time = now_seconds();
 
     while (1) {
         size_t bytes_read = fread(payload, 1, sizeof(payload), file);
 
         if (bytes_read > 0) {
+            total_bytes += bytes_read;
             if (send_and_wait_ack(sockfd, &receiver, receiver_len,
                                   sequence, TYPE_DATA, payload,
-                                  (uint16_t)bytes_read, &est) != 0) {
+                                  (uint16_t)bytes_read, &est,
+                                  &retransmissions, &timeouts) != 0) {
                 success = 0;
                 break;
             }
@@ -240,16 +243,26 @@ int main(int argc, char *argv[])
 
     if (success &&
         send_and_wait_ack(sockfd, &receiver, receiver_len, sequence,
-                          TYPE_FIN, NULL, 0, &est) != 0)
+                          TYPE_FIN, NULL, 0, &est,
+                          &retransmissions, &timeouts) != 0)
         success = 0;
+
+    double end_time = now_seconds();
+    double duration = end_time - start_time;
+    if (duration <= 0.0) duration = 0.000001;
+    double goodput = (double)total_bytes / duration;
 
     fclose(file);
     close(sockfd);
 
-    if (success)
-        printf("\nFile transfer completed successfully.\n");
-    else
-        printf("\nFile transfer failed.\n");
+    printf("\n--- Adaptive RTO Transfer Summary ---\n");
+    printf("Total bytes transferred: %" PRIu64 "\n", total_bytes);
+    printf("Retransmissions: %" PRIu64 "\n", retransmissions);
+    printf("Timeouts: %" PRIu64 "\n", timeouts);
+    printf("Duration: %.4f s\n", duration);
+    printf("Goodput: %.2f bytes/s (%.2f KiB/s)\n", goodput, goodput / 1024.0);
+    printf("Final SRTT: %.3f s | Final RTTVAR: %.3f s | Final RTO: %.3f s\n",
+           est.srtt, est.rttvar, est.rto);
 
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }

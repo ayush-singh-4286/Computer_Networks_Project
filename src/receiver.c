@@ -1,4 +1,3 @@
-
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>
@@ -7,15 +6,11 @@
 #include <string.h>
 #include <inttypes.h>
 #include <errno.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/time.h>
 
 #include "packet.h"
 
-#define RECEIVER_PORT 9000
-#define FIN_WAIT_SECONDS 5
+#define DEFAULT_RECEIVER_PORT 9000
+#define FIN_WAIT_SECONDS 1
 
 static uint32_t file_hash(FILE *file)
 {
@@ -33,7 +28,7 @@ static uint32_t file_hash(FILE *file)
 }
 
 static int send_response(
-    int sockfd,
+    SOCKET sockfd,
     struct sockaddr_in *sender,
     socklen_t sender_len,
     uint32_t sequence,
@@ -72,32 +67,35 @@ static int send_response(
 
 int main(int argc, char *argv[])
 {
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s <output_file>\n", argv[0]);
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <output_file> [port]\n", argv[0]);
         return 1;
     }
 
-    FILE *output = fopen(argv[1], "wb");
+    int port = (argc >= 3) ? atoi(argv[2]) : DEFAULT_RECEIVER_PORT;
 
+    FILE *output = fopen(argv[1], "w+b");
     if (output == NULL) {
         perror("fopen");
         return 1;
     }
 
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-
-    if (sockfd < 0) {
+    SOCKET sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd == INVALID_SOCKET) {
         perror("socket");
         fclose(output);
         return 1;
     }
+
+    int opt = 1;
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt));
 
     struct sockaddr_in receiver_addr;
     memset(&receiver_addr, 0, sizeof(receiver_addr));
 
     receiver_addr.sin_family = AF_INET;
     receiver_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    receiver_addr.sin_port = htons(RECEIVER_PORT);
+    receiver_addr.sin_port = htons((uint16_t)port);
 
     if (bind(
             sockfd,
@@ -109,7 +107,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    printf("Receiver listening on UDP port %d\n", RECEIVER_PORT);
+    printf("Receiver listening on UDP port %d\n", port);
     printf("Output file: %s\n", argv[1]);
 
     uint32_t expected_sequence = 0;
@@ -144,7 +142,6 @@ int main(int argc, char *argv[])
                     printf("FIN wait timeout. Closing receiver.\n");
                     break;
                 }
-
                 continue;
             }
 
@@ -170,53 +167,29 @@ int main(int argc, char *argv[])
         }
 
         if (type == TYPE_DATA) {
-            /*
-             * A new DATA packet is accepted only if its sequence
-             * matches the next expected sequence number.
-             */
             if (sequence == expected_sequence) {
-                size_t written = fwrite(
-                    payload, 1, payload_length, output);
-
-                if (written != payload_length) {
-                    perror("fwrite");
-                    success = 0;
-                    break;
+                if (output) {
+                    size_t written = fwrite(payload, 1, payload_length, output);
+                    if (written != payload_length) {
+                        perror("fwrite");
+                        success = 0;
+                        break;
+                    }
+                    fflush(output);
                 }
 
-                
-expected_sequence++;
+                expected_sequence++;
 
-if (fflush(output) != 0) {
-    perror("fflush");
-    success = 0;
-    break;
-}
-
-printf(
-    "Accepted DATA %" PRIu32
-    "; next expected=%" PRIu32 "\n",
-    sequence, expected_sequence);
+                printf("Accepted DATA %" PRIu32 "; next expected=%" PRIu32 "\n",
+                       sequence, expected_sequence);
 
             } else if (sequence < expected_sequence) {
-                printf(
-                    "Duplicate DATA %" PRIu32
-                    "; sending ACK again.\n",
-                    sequence);
+                printf("Duplicate DATA %" PRIu32 "; sending ACK again.\n", sequence);
             } else {
-                printf(
-                    "Out-of-order DATA %" PRIu32
-                    "; expected=%" PRIu32 "\n",
-                    sequence, expected_sequence);
+                printf("Out-of-order DATA %" PRIu32 "; expected=%" PRIu32 "\n",
+                       sequence, expected_sequence);
             }
 
-            /*
-             * Cumulative ACK: acknowledge the last consecutive
-             * DATA packet received.
-             *
-             * UINT32_MAX represents ACK -1, meaning no DATA
-             * packets have been accepted yet.
-             */
             uint32_t ack_sequence =
                 (expected_sequence == 0)
                     ? UINT32_MAX
@@ -232,15 +205,17 @@ printf(
                 break;
             }
 
-            printf("Sent cumulative ACK %" PRIu32 "\n",
-                   ack_sequence);
+            printf("Sent cumulative ACK %" PRIu32 "\n", ack_sequence);
         } else if (type == TYPE_FIN) {
 
             if (sequence == expected_sequence) {
-                if (fflush(output) != 0) {
-                    perror("fflush");
-                    success = 0;
-                    break;
+                if (output) {
+                    fflush(output);
+                    uint32_t hash = file_hash(output);
+                    printf("Received DATA packets: %" PRIu32 "\n", expected_sequence);
+                    printf("Output file hash (FNV-1a): %08" PRIx32 "\n", hash);
+                    fclose(output);
+                    output = NULL;
                 }
 
                 if (send_response(
@@ -272,11 +247,6 @@ printf(
                     success = 0;
                     break;
                 }
-
-                /*
-                 * Wait for a possible retransmitted FIN in case
-                 * the sender did not receive FIN_ACK.
-                 */
             } else if (sequence < expected_sequence) {
                 printf("Duplicate FIN received. Sending FIN_ACK again.\n");
 
@@ -290,20 +260,14 @@ printf(
                     break;
                 }
             } else {
-                printf(
-                    "FIN arrived too early: FIN sequence=%" PRIu32
-                    ", expected=%" PRIu32 "\n",
-                    sequence, expected_sequence);
+                printf("FIN arrived too early: FIN sequence=%" PRIu32
+                       ", expected=%" PRIu32 "\n",
+                       sequence, expected_sequence);
             }
         } else {
             printf("Unexpected packet type %u ignored.\n", type);
         }
 
-        /*
-         * After FIN, the receive timeout lets us close gracefully
-         * if no retransmitted FIN arrives. Repeated FIN packets
-         * receive another FIN_ACK.
-         */
         if (fin_received &&
             sender.sin_addr.s_addr == last_sender.sin_addr.s_addr &&
             sender.sin_port == last_sender.sin_port &&
@@ -312,20 +276,13 @@ printf(
         }
     }
 
-    if (fflush(output) != 0) {
-        perror("fflush");
-        success = 0;
-    }
-
-    uint32_t hash = file_hash(output);
-
-    printf("Received DATA packets: %" PRIu32 "\n",
-           expected_sequence);
-    printf("Output file hash (FNV-1a): %08" PRIx32 "\n", hash);
-
-    if (fclose(output) != 0) {
-        perror("fclose");
-        success = 0;
+    if (output) {
+        fflush(output);
+        uint32_t hash = file_hash(output);
+        printf("Received DATA packets: %" PRIu32 "\n", expected_sequence);
+        printf("Output file hash (FNV-1a): %08" PRIx32 "\n", hash);
+        fclose(output);
+        output = NULL;
     }
 
     close(sockfd);

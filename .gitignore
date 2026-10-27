@@ -6,16 +6,21 @@ stop_wait
 go_back_n
 selective_repeat
 channel_emulator
+*.exe
+*.o
+*.obj
 
-# Temporary test outputs
+# Temporary test outputs and artifacts
 stopwait_output.txt
 gbn_output.txt
 gbn_loss_output.txt
 gbn_reorder_output.txt
 sr_output.txt
-gbn_reorder_output.txt
 received.txt
-
-# Temporary input/output test files
 input.txt
 output.txt
+*.log
+
+# Python cache
+__pycache__/
+*.pyc

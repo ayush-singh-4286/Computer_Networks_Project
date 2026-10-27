@@ -1,12 +1,7 @@
-
 #ifndef CHANNEL_EMULATOR_H
 #define CHANNEL_EMULATOR_H
 
-#ifdef _WIN32
-#include <winsock2.h>
-#else
-#include <netinet/in.h>
-#endif
+#include "net_compat.h"
 
 typedef struct
 {

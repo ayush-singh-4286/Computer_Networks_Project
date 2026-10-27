@@ -1,9 +1,9 @@
-
 #ifndef PACKET_H
 #define PACKET_H
 
 #include <stdint.h>
 #include <stddef.h>
+#include "net_compat.h"
 
 #define PACKET_MAGIC "RDT1"
 #define HEADER_SIZE 16
