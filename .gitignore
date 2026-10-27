@@ -1,0 +1,21 @@
+# Compiled executables
+sender
+receiver
+receiver_sr
+stop_wait
+go_back_n
+selective_repeat
+channel_emulator
+
+# Temporary test outputs
+stopwait_output.txt
+gbn_output.txt
+gbn_loss_output.txt
+gbn_reorder_output.txt
+sr_output.txt
+gbn_reorder_output.txt
+received.txt
+
+# Temporary input/output test files
+input.txt
+output.txt

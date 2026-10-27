@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -9,7 +10,7 @@
 
 #include "packet.h"
 
-#define RECEIVER_PORT 9000
+#define RECEIVER_PORT 7000
 #define WINDOW_SIZE 4
 #define TIMEOUT_SECONDS 1
 #define CHUNK_SIZE 8
@@ -26,12 +27,12 @@ int main(void)
         "Go-Back-N ARQ sends packets using a sliding window.";
 
     size_t message_length = strlen(message);
+
     uint32_t total_packets =
         (uint32_t)((message_length + CHUNK_SIZE - 1) / CHUNK_SIZE);
 
     uint8_t packets[MAX_PACKETS][MAX_PACKET_SIZE];
     size_t packet_lengths[MAX_PACKETS];
-    int acknowledged[MAX_PACKETS] = {0};
 
     uint32_t base = 0;
     uint32_t next_seq = 0;
@@ -43,6 +44,7 @@ int main(void)
     }
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+
     if (sockfd < 0) {
         perror("socket");
         return 1;
@@ -60,6 +62,7 @@ int main(void)
     receiver_addr.sin_port = htons(RECEIVER_PORT);
     receiver_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
+    /* Prepare all data packets. */
     for (uint32_t seq = 0; seq < total_packets; seq++) {
         size_t offset = (size_t)seq * CHUNK_SIZE;
         size_t remaining = message_length - offset;
@@ -72,7 +75,7 @@ int main(void)
                 packets[seq],
                 sizeof(packets[seq]),
                 seq,
-                PACKET_TYPE_DATA,
+                TYPE_DATA,
                 (const uint8_t *)(message + offset),
                 chunk_length,
                 &packet_lengths[seq]) != 0) {
@@ -87,6 +90,7 @@ int main(void)
 
     while (base < total_packets) {
 
+        /* Fill the sending window. */
         while (next_seq < total_packets &&
                next_seq < base + WINDOW_SIZE) {
 
@@ -139,6 +143,7 @@ int main(void)
                 return 1;
             }
 
+            /* Go-Back-N: retransmit all outstanding packets. */
             for (uint32_t seq = base; seq < next_seq; seq++) {
                 ssize_t sent = sendto(
                     sockfd,
@@ -160,31 +165,34 @@ int main(void)
             continue;
         }
 
-        if (!verify_packet(ack, (size_t)received) ||
-            ack[10] != PACKET_TYPE_ACK) {
+        uint32_t ack_seq;
+        uint8_t ack_type;
+        uint16_t ack_length;
+        const uint8_t *ack_payload;
+
+        if (decode_packet(
+                ack,
+                (size_t)received,
+                &ack_seq,
+                &ack_type,
+                &ack_payload,
+                &ack_length) != 0 ||
+            ack_type != TYPE_ACK ||
+            ack_length != 0) {
             printf("Invalid or unexpected packet ignored.\n");
             continue;
         }
 
-        uint32_t ack_seq =
-            ((uint32_t)ack[4] << 24) |
-            ((uint32_t)ack[5] << 16) |
-            ((uint32_t)ack[6] << 8) |
-            (uint32_t)ack[7];
-
+        /*
+         * The receiver's ACK sequence number represents the
+         * last consecutively received packet. Therefore, ACK n
+         * acknowledges all packets up to and including n.
+         */
         if (ack_seq >= base && ack_seq < next_seq) {
-            acknowledged[ack_seq] = 1;
-            printf("Received ACK %u\n", ack_seq);
+            printf("Received cumulative ACK %u\n", ack_seq);
 
-            uint32_t previous_base = base;
-
-            while (base < total_packets && acknowledged[base]) {
-                base++;
-            }
-
-            if (base > previous_base) {
-                retries = 0;
-            }
+            base = ack_seq + 1;
+            retries = 0;
         } else {
             printf("Ignoring unexpected ACK %u\n", ack_seq);
         }

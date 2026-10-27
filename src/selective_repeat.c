@@ -9,7 +9,7 @@
 
 #include "packet.h"
 
-#define RECEIVER_PORT 9000
+#define RECEIVER_PORT 7000
 #define WINDOW_SIZE 4
 #define TIMEOUT_SECONDS 1
 #define CHUNK_SIZE 8
@@ -73,7 +73,7 @@ int main(void)
                 packets[seq],
                 sizeof(packets[seq]),
                 seq,
-                PACKET_TYPE_DATA,
+                TYPE_DATA,
                 (const uint8_t *)(message + offset),
                 chunk_length,
                 &packet_lengths[seq]) != 0) {
@@ -173,17 +173,25 @@ int main(void)
             continue;
         }
 
-        if (!verify_packet(ack, (size_t)received) ||
-            ack[10] != PACKET_TYPE_ACK) {
-            printf("Invalid or unexpected packet ignored.\n");
-            continue;
-        }
+        uint32_t decoded_seq;
+uint8_t decoded_type;
+uint16_t decoded_length;
+const uint8_t *decoded_payload;
 
-        uint32_t ack_seq =
-            ((uint32_t)ack[4] << 24) |
-            ((uint32_t)ack[5] << 16) |
-            ((uint32_t)ack[6] << 8) |
-            (uint32_t)ack[7];
+if (decode_packet(
+        ack,
+        (size_t)received,
+        &decoded_seq,
+        &decoded_type,
+        &decoded_payload,
+        &decoded_length) != 0 ||
+    decoded_type != TYPE_ACK ||
+    decoded_length != 0) {
+    printf("Invalid or unexpected packet ignored.\n");
+    continue;
+}
+
+        uint32_t ack_seq = decoded_seq;
 
         if (ack_seq >= base && ack_seq < next_seq) {
 
