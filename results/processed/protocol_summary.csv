@@ -1,0 +1,5 @@
+protocol,total_runs,successful_runs,hash_match_count,reliability_pct,avg_duration_sec,avg_goodput_kib_sec,avg_retransmissions,total_retransmissions,total_timeouts
+Stop-and-Wait,42,39,40,95.24,1.8715,1428717.84,0.88,37,35
+Go-Back-N,54,49,49,90.74,1.2744,428.06,1.04,56,17
+Selective-Repeat,54,54,54,100.0,1.7358,323.79,0.87,47,39
+Adaptive-RTO,12,12,12,100.0,2.2793,13.82,0.0,0,0
